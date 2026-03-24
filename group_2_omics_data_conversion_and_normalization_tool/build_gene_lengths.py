@@ -45,7 +45,7 @@ def build_exonic_gene_lengths(gtf_path):
 
 
 if __name__ == "__main__":
-    gtf_file = "Homo_sapiens.GRCh38.115.gtf"  # <- put your file here
+    gtf_file = "Homo_sapiens.GRCh38.115.gtf" 
 
     print("Building gene length database...")
     gene_lengths = build_exonic_gene_lengths(gtf_file)

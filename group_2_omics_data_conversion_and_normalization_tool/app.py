@@ -2,15 +2,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 
-# ─────────────────────────────────────────────
-# ⚙️ CONFIG
-# ─────────────────────────────────────────────
 st.set_page_config(page_title="OmicsForge", layout="wide")
 st.title("🧬 OmicsForge — Ultra Fast RNA Normalisation")
 
-# ─────────────────────────────────────────────
-# LOAD DB
-# ─────────────────────────────────────────────
 @st.cache_data
 def load_gene_lengths():
     df = pd.read_csv("gene_lengths_exonic.csv")
@@ -18,9 +12,6 @@ def load_gene_lengths():
 
 gene_length_db = load_gene_lengths()
 
-# ─────────────────────────────────────────────
-# FUNCTIONS
-# ─────────────────────────────────────────────
 def compute_rpkm(counts, lengths_bp):
     total = counts.sum()
     return (counts / (lengths_bp / 1e3)) / (total / 1e6) if total else np.zeros_like(counts)
@@ -38,9 +29,6 @@ def tpm_to_rpkm(tpm):
     total = tpm.sum()
     return (tpm / 1e6) * total if total else np.zeros_like(tpm)
 
-# ─────────────────────────────────────────────
-# UPLOAD
-# ─────────────────────────────────────────────
 uploaded = st.file_uploader("Upload CSV", type=["csv"])
 
 if uploaded:
@@ -69,10 +57,7 @@ if uploaded:
     do_tpm = "TPM" in method
     do_rpkm = "RPKM" in method
 
-    # ─────────────────────────────────────────
-    # RUN NORMALISATION
-    # ─────────────────────────────────────────
-    if st.button("🚀 Run Normalisation"):
+    if st.button("Run Normalisation"):
 
         df["gene_length_bp"] = df[gene_id_col].map(gene_length_db)
 
@@ -88,21 +73,17 @@ if uploaded:
             if do_rpkm:
                 df_valid[f"RPKM_{col}"] = compute_rpkm(counts, lengths)
 
-        # ✅ STORE RESULT IN SESSION
         st.session_state["df_valid"] = df_valid
         st.session_state["gene_id_col"] = gene_id_col
 
-    # ─────────────────────────────────────────
-    # SHOW RESULTS (PERSISTENT)
-    # ─────────────────────────────────────────
     if "df_valid" in st.session_state:
 
         df_valid = st.session_state["df_valid"]
         gene_id_col = st.session_state["gene_id_col"]
 
-        st.success("✅ Normalisation complete")
+        st.success("Normalisation complete")
 
-        st.subheader("📊 Results")
+        st.subheader("Results")
         st.dataframe(df_valid.head())
 
         st.download_button(
@@ -111,11 +92,8 @@ if uploaded:
             "normalized.csv"
         )
 
-        # ─────────────────────────────────────
-        # 🔄 CONVERSION (NOW FIXED)
-        # ─────────────────────────────────────
         st.markdown("---")
-        st.subheader("🔄 Conversion")
+        st.subheader("Conversion")
 
         tpm_cols = [c for c in df_valid.columns if c.startswith("TPM_")]
         rpkm_cols = [c for c in df_valid.columns if c.startswith("RPKM_")]

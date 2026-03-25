@@ -9,51 +9,45 @@ from services import parse_csv_file, get_preview_data, process_normalization
 
 app = FastAPI(title="OmicsForge API", description="SOTA RNA-Seq Normalization Backend")
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    return JSONResponse(
-        status_code=400, 
-        content={"detail": f"Internal Error: {str(exc)}"}, 
-        headers={"Access-Control-Allow-Origin": "*"}
-    )
-
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    return JSONResponse(
-        status_code=422, 
-        content={"detail": f"Validation Error: {str(exc)}"}, 
-        headers={"Access-Control-Allow-Origin": "*"}
-    )
-
-@app.exception_handler(StarletteHTTPException)
-async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-    return JSONResponse(
-        status_code=exc.status_code, 
-        content={"detail": exc.detail}, 
-        headers={"Access-Control-Allow-Origin": "*"}
-    )
-
 # Dynamic CORS configuration via environment variables for deployment flexibility
-# Example value for ALLOWED_ORIGINS: "https://your-app.vercel.app,http://localhost:3000"
 raw_origins = os.environ.get("ALLOWED_ORIGINS", "")
-allowed_origins_list = [o.strip() for o in raw_origins.split(",") if o.strip()]
+allowed_origins = [o.strip().rstrip("/") for o in raw_origins.split(",") if o.strip()]
 
-# If no environment variable is provided, allow all origins by default to ensure 
-# deployment compatibility across different Vercel preview URLs.
-if not allowed_origins_list:
-    allowed_origins_list = ["*"]
+# Hardcoded fallbacks to ensure the specific deployment origin is always permitted
+deployment_origin = "https://project-roan-six-31.vercel.app"
+if deployment_origin not in allowed_origins:
+    allowed_origins.append(deployment_origin)
+if "http://localhost:3000" not in allowed_origins:
+    allowed_origins.append("http://localhost:3000")
+
+# If no restricted environment variable is set, allow all for debugging/testing
+if not raw_origins:
+    allowed_origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins_list,
-    allow_credentials=False,
+    allow_origins=allowed_origins,
+    allow_credentials=True if "*" not in allowed_origins else False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(status_code=400, content={"detail": f"Internal Error: {str(exc)}"})
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(status_code=422, content={"detail": f"Validation Error: {str(exc)}"})
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
 @app.get("/")
 def health_check():
-    return {"status": "OmicsForge API is Online", "cors_mode": "Permissive" if "*" in allowed_origins_list else "Restricted"}
+    return {"status": "OmicsForge API is Online", "cors_mode": "Permissive" if "*" in allowed_origins else "Restricted"}
 
 @app.post("/api/preview")
 async def preview_csv(file: UploadFile = File(...)):
@@ -70,9 +64,9 @@ async def preview_csv(file: UploadFile = File(...)):
     except Exception as e:
         return JSONResponse(
             status_code=400, 
-            content={"detail": str(e)}, 
-            headers={"Access-Control-Allow-Origin": "*"}
+            content={"detail": str(e)}
         )
+
 
 @app.post("/api/normalize")
 async def normalize_csv(
@@ -95,6 +89,6 @@ async def normalize_csv(
     except Exception as e:
         return JSONResponse(
             status_code=400, 
-            content={"detail": str(e)}, 
-            headers={"Access-Control-Allow-Origin": "*"}
+            content={"detail": str(e)}
         )
+

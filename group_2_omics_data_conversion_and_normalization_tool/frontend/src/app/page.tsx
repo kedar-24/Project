@@ -58,20 +58,38 @@ export default function Home() {
         throw new Error(`Server Error (${res.status}): ${text}`);
       }
       
-      const data = await res.json();
+      // The backend now returns a CSV stream to be memory efficient. 
+      // We read it as text and parse it into an array of objects for the UI.
+      const csvText = await res.text();
       
-      if (!data || !data.result) {
-        throw new Error("Invalid payload returned from the backend pipeline.");
-      }
+      // Simple but robust CSV parser for genomic datasets (handles basic quoting if present)
+      const parseCSV = (text: string) => {
+        const lines = text.trim().split(/\r?\n/);
+        if (lines.length < 2) return [];
+        
+        const headers = lines[0].split(",").map(h => h.replace(/^"(.*)"$/, "$1").trim());
+        return lines.slice(1).map(line => {
+          const values = line.split(",").map(v => v.replace(/^"(.*)"$/, "$1").trim());
+          const obj: any = {};
+          headers.forEach((h, i) => {
+            const val = values[i];
+            // Convert numeric strings back to numbers for math logic in ResultsView
+            obj[h] = (val !== "" && !isNaN(Number(val))) ? Number(val) : val;
+          });
+          return obj;
+        });
+      };
+
+      const result = parseCSV(csvText);
       
-      if (data.result.length === 0) {
+      if (!result || result.length === 0) {
         alert("Warning: Normalisation resulted in an empty dataset! This usually means NONE of your Gene IDs mapped successfully against the Exonic Length Database.");
       }
 
-      setNormalizedData(data.result);
+      setNormalizedData(result);
       setGeneIdCol(config.gene_id_col);
     } catch (err: any) {
-      console.error(err);
+      console.error("Normalization Error Details:", err);
       alert(`Normalization Process Failed:\n\n${err.message}`);
     } finally {
       setIsProcessing(false);

@@ -73,13 +73,23 @@ async def normalize_csv(
         
         content = await file.read()
         df = parse_csv_file(content)
-        
-        normalized_records = process_normalization(df, gene_id_col, is_tpm, is_rpkm)
 
-        return JSONResponse(content={"result": normalized_records})
+        from fastapi.responses import StreamingResponse
+        import io
+        
+        normalized_df = process_normalization(df, gene_id_col, is_tpm, is_rpkm)
+        buffer = io.StringIO()
+        normalized_df.to_csv(buffer, index=False)
+        buffer.seek(0)
+
+        return StreamingResponse(
+            buffer,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": "attachment; filename=normalized.csv"
+            }
+)
     except Exception as e:
-        return JSONResponse(
-            status_code=400, 
-            content={"detail": str(e)}
-        )
+        print("ERROR:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 

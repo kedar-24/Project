@@ -13,24 +13,15 @@ app = FastAPI(title="OmicsForge API", description="SOTA RNA-Seq Normalization Ba
 raw_origins = os.environ.get("ALLOWED_ORIGINS", "")
 allowed_origins = [o.strip().rstrip("/") for o in raw_origins.split(",") if o.strip()]
 
-# Hardcoded fallbacks to ensure the specific deployment origin is always permitted
-deployment_origin = "https://project-roan-six-31.vercel.app"
-if deployment_origin not in allowed_origins:
-    allowed_origins.append(deployment_origin)
-if "http://localhost:3000" not in allowed_origins:
-    allowed_origins.append("http://localhost:3000")
-
-# If no restricted environment variable is set, allow all for debugging/testing
-if not raw_origins:
-    allowed_origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins,
-    allow_credentials=True if "*" not in allowed_origins else False,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -47,7 +38,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
 
 @app.get("/")
 def health_check():
-    return {"status": "OmicsForge API is Online", "cors_mode": "Permissive" if "*" in allowed_origins else "Restricted"}
+    return {"status": "OmicsForge API is Online", "cors_mode": "Permissive (Wildcard)"}
 
 @app.post("/api/preview")
 async def preview_csv(file: UploadFile = File(...)):

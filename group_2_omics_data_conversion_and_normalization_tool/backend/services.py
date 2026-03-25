@@ -20,36 +20,45 @@ def get_preview_data(df: pd.DataFrame) -> dict:
     }
 
 def process_normalization(df: pd.DataFrame, gene_id_col: str, is_tpm: bool, is_rpkm: bool) -> list:
-    """Core domain pipeline managing data transformation across normalisation strategies."""
+    """Optimized domain pipeline with memory-safe operations for large-scale omics files."""
     if gene_id_col not in df.columns:
-        raise ValueError(f"Selected gene column '{gene_id_col}' is missing from the file.")
+        raise ValueError(f"Selected gene column '{gene_id_col}' is missing.")
 
-    # Strip suffixes off Ensembl IDs
+    # 1. Clean Gene IDs efficiently
     df[gene_id_col] = df[gene_id_col].astype(str).str.split(".").str[0]
     
-    # Try to map lengths from internal DB
+    # 2. Map lengths and handle fallback without full dataframe copies
     df["gene_length_bp"] = df[gene_id_col].map(gene_length_db)
     
-    # [NEW] [Refinement] Fallback Mechanism
-    # If lookup failed but the user's file already has a column named GeneLength or Length, use that!
-    length_fallback_col = next((c for c in df.columns if "length" in c.lower()), None)
+    length_fallback_col = next((c for c in df.columns if "length" in c.lower() and c != "gene_length_bp"), None)
     if length_fallback_col:
         df["gene_length_bp"] = df["gene_length_bp"].fillna(df[length_fallback_col])
 
-    df_valid = df.dropna(subset=["gene_length_bp"]).copy()
-    lengths = df_valid["gene_length_bp"].values.astype(float)
+    # 3. Filter in-place (mostly) by dropping rows with missing length dependencies
+    # We drop from the original 'df' to save memory rather than creating a 'df_valid' copy
+    df.dropna(subset=["gene_length_bp"], inplace=True)
     
-    numeric_cols = df_valid.select_dtypes(include=np.number).columns.tolist()
+    # Cast lengths to float32 to halve memory usage compared to float64
+    lengths = df["gene_length_bp"].values.astype(np.float32)
+    
+    # Identification of numeric columns for vectorization
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
     if "gene_length_bp" in numeric_cols:
         numeric_cols.remove("gene_length_bp")
-    if length_fallback_col in numeric_cols:
+    if length_fallback_col and length_fallback_col in numeric_cols:
         numeric_cols.remove(length_fallback_col)
 
     for col in numeric_cols:
-        counts = df_valid[col].fillna(0).values.astype(float)
+        # Cast input counts to float32 for processing
+        counts = df[col].fillna(0).values.astype(np.float32)
+        
         if is_tpm:
-            df_valid[f"TPM_{col}"] = compute_tpm(counts, lengths)
+            # Resulting columns also stored as float32
+            df[f"TPM_{col}"] = compute_tpm(counts, lengths).astype(np.float32)
         if is_rpkm:
-            df_valid[f"RPKM_{col}"] = compute_rpkm(counts, lengths)
+            df[f"RPKM_{col}"] = compute_rpkm(counts, lengths).astype(np.float32)
 
-    return df_valid.fillna("").to_dict(orient="records")
+    # 4. Final conversion to records - this is the most memory-intensive step.
+    # We fillna in the DF before conversion to avoid per-dict overhead.
+    return df.fillna("").to_dict(orient="records")
+
